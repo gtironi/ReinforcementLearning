@@ -5,12 +5,12 @@ class MultiAgentDataAnalysisEnv(MultiAgentEnv):
             "codificador": gym.spaces.Discrete(5),
             "revisor": gym.spaces.Discrete(3)
         }
-        
+
         self.observation_space = {
             "codificador": gym.spaces.Box(low=0, high=1, shape=(1,)),
             "revisor": gym.spaces.Box(low=0, high=1, shape=(1,))
         }
-        
+
         self.problema = "Analise o dataset de vendas para identificar tendências."
         self.codigo = None
         self.codigo_anterior = None
@@ -28,7 +28,7 @@ class MultiAgentDataAnalysisEnv(MultiAgentEnv):
         self.historico_sugestoes = []
         self.token_count_codificador = 0
         self.token_count_revisor = 0
-        
+
         return {
             "codificador": self.problema,
             "revisor": "Aguarda o código do codificador para revisão."
@@ -44,11 +44,11 @@ class MultiAgentDataAnalysisEnv(MultiAgentEnv):
             codificador_action = actions["codificador"]
             responses["codificador"], tokens_used_codificador = self.execute_codificador_action(codificador_action)
             self.token_count_codificador += tokens_used_codificador
-            
+
             # Penalidade por tokens do Codificador
             rewards["codificador"] -= tokens_used_codificador * 0.01
 
-            if codificador_action in [0, 2, 3]: 
+            if codificador_action in [0, 2, 3]:
                 self.codigo_anterior = self.codigo
                 self.codigo = responses["codificador"]
                 codigo_funcional = self.avaliar_codigo()
@@ -66,12 +66,12 @@ class MultiAgentDataAnalysisEnv(MultiAgentEnv):
             revisor_action = actions["revisor"]
             responses["revisor"], tokens_used_revisor = self.execute_revisor_action(revisor_action)
             self.token_count_revisor += tokens_used_revisor
-            
+
             # Penalidade por tokens do Revisor
             rewards["revisor"] -= tokens_used_revisor * 0.01
 
             # Se o Revisor aprova o código
-            if revisor_action == 2: 
+            if revisor_action == 2:
                 self.aprovado = True
                 dones["codificador"] = True
                 dones["revisor"] = True
@@ -108,7 +108,7 @@ class MultiAgentDataAnalysisEnv(MultiAgentEnv):
             prompt = "Documente e melhore a documentação do código."
         elif action == 4:
             return "Solicitação de explicação enviada ao revisor.", tokens_used
-        
+
         if action != 4:
             response, tokens_used = self.call_gpt_api(prompt)
             return response, tokens_used
@@ -133,10 +133,10 @@ class MultiAgentDataAnalysisEnv(MultiAgentEnv):
             return False
         else:
             return True
-    
+
     def analisar_complexidade(self):
         print("Análise de complexidade e conformidade com linters realizada.")
-    
+
     def verificar_melhoria_implementada(self):
         if self.codigo_anterior and "improved" in self.codigo.lower():
             return True
@@ -208,30 +208,30 @@ for episode in range(num_episodes):
     obs = env.reset()
     done = False
     episode_reward = {"codificador": 0, "revisor": 0}
-    
+
     while not done:
         # Ações do agente codificador
         codificador_action = codificador_policy(obs["codificador"])
-        
+
         # Ações do agente revisor, se houver código disponível para revisão
         revisor_action = revisor_policy(obs["revisor"]) if env.codigo else None
-        
+
         actions = {"codificador": codificador_action, "revisor": revisor_action}
-        
+
         # Passo no ambiente com as ações escolhidas
         obs, rewards, dones, _ = env.step(actions)
-        
+
         # Registro das recompensas acumuladas por episódio para cada agente
         episode_reward["codificador"] += rewards["codificador"]
         episode_reward["revisor"] += rewards["revisor"]
-        
+
         # Verifica se o ciclo de ações está concluído
         if dones["codificador"] and dones["revisor"]:
             done = True
-    
+
     # Exibe as recompensas do episódio
     print(f"Episode {episode + 1}: Recompensas Codificador = {episode_reward['codificador']}, Recompensas Revisor = {episode_reward['revisor']}")
-    
+
     # Atualiza as políticas dos agentes
     agent_codificador.update()
     agent_revisor.update()
