@@ -58,3 +58,10 @@ Uma memória compartilhada entre o Agente Codificador e o Agente Revisor, que re
 Colaborar para atingir uma solução eficaz, garantindo a qualidade e eficiência do código. As recompensas dadas pelo ambiente visam:
 - **Agente Codificador**: Focar em produzir código correto e eficiente.
 - **Agente Revisor**: Aprimorar o código com sugestões valiosas.
+
+## Links Úteis
+
+- [RLlib](https://applied-rl-course.netlify.app/en/module2)
+- [LLM-based Multi-Agent Reinforcement Learning: Current and Future Directions](https://arxiv.org/abs/2405.11106)
+- [Building Cooperative Embodied Agents Modularly with Large Language Models](https://arxiv.org/abs/2307.02485)
+
