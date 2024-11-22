@@ -3,38 +3,46 @@ from prompts import *
 
 class Programador:
     def __init__(self, model, problem_description):
-        self.base_prompt = "You are a Python developer and data-scientist. Your job is to write code to solve data-science problems. Be concise and make sure to document your code."
-        self.problema_descrito = problem_description
+        # self.base_prompt = "You are a Python developer and data-scientist. Your job is to write code to solve data-science problems. Be concise and make sure to document your code."
+        self.problem_description = problem_description
         self.codigo = ""
-        self.documentacao = ""
+        # self.documentacao = ""
         self.sugestoes = []
         self.model = model
+        self.conversation_history = []
 
     def criar_novo_codigo(self):
         """
         Gera código inicial com base na descrição do problema.
         """
-        prompt = f"Escreva um código Python para resolver o seguinte problema: {self.problema_descrito}"
-        codigo = self._chamada_ollama(prompt)
+        prompt = f"You are a Python developer and data-scientist. Your job is to write code
+        to solve data-science problems. Be concise and make sure to document your code. 
+        Write a python code to solve the following problem: {self.problem_description}. 
+        Remember to store the F1 Score calculation of the model in variables named f1_score."
+        
+        codigo = extrair_codigo(self._chamada_ollama(prompt))
         self.codigo = codigo
         return codigo
 
-    def revisar_codigo(self):
-        """
-        Revisar o próprio código internamente.
-        """
-        prompt = f"Revise o seguinte código para melhorar e corrigir possíveis erros:\n\n{self.codigo}"
-        revisao = self._chamada_ollama(prompt)
-        self.codigo = revisao
-        return revisao
+    # def revisar_codigo(self):
+    #     """
+    #     Revisar o próprio código internamente.
+    #     """
+    #     prompt = f"Revise o seguinte código para melhorar e corrigir possíveis erros:\n\n{self.codigo}"
+    #     revisao = self._chamada_ollama(prompt)
+    #     self.codigo = revisao
+    #     return revisao
 
     def implementar_melhorias(self, sugestoes_revisor):
         """
         Implementa melhorias no código com base nas sugestões fornecidas.
         """
         self.sugestoes.extend(sugestoes_revisor)
-        prompt = f"Implemente as seguintes melhorias no código:\nSugestões: {', '.join(sugestoes_revisor)}\n\nCódigo:\n{self.codigo}"
-        melhoria = self._chamada_ollama(prompt)
+        prompt = f"Implement the following improvements in the code. Respond
+        with Python code only and nothing else.\nSuggestions:
+        {', '.join(sugestoes_revisor)}\n\nCode:\n{self.codigo}."
+        
+        melhoria = extrair_codigo(self._chamada_ollama(prompt))
         self.codigo = melhoria
         return melhoria
 
@@ -42,8 +50,23 @@ class Programador:
         """
         Gera e aprimora a documentação do código.
         """
-        prompt = f"Documente o seguinte código, explicando a lógica e o funcionamento das partes principais:\n\n{self.codigo}"
-        documentacao = self._chamada_ollama(prompt)
+        prompt = f"Document the following code, explaining the logic and the
+        functionalityof the main parts. Respond with Python code only and 
+        nothing else.\nCode:\n\n{self.codigo}."
+
+        documentacao = extrair_codigo(self._chamada_ollama(prompt))
+        self.documentacao = documentacao
+        return documentacao
+    
+    def testar_parametros_diferentes(self):
+        """
+        Gera e aprimora a documentação do código.
+        """
+        prompt = f"Test different parameters for the model in question. Remember to store
+        the F1 Score calculation of the model in a variable named f1_score. Respond with 
+        Python code only and nothing else.\n\n{self.codigo}."
+
+        documentacao = extrair_codigo(self._chamada_ollama(prompt))
         self.documentacao = documentacao
         return documentacao
 
@@ -51,15 +74,12 @@ class Programador:
         """
         Faz uma chamada à API do Ollama com o prompt especificado.
         """
-        response = ollama.chat(model=self.model, messages=[
-        {
-            'role': 'user', 
-            'content': prompt,
-        }])
-
+        self.conversation_history.append({'role': 'user', 'content': prompt})
+        response = ollama.chat(model=self.model, messages=self.conversation_history)
+        self.conversation_history.append(response['message'])
+        
         return response['message']['content']
        
-
 
 class Revisor:
     def __init__(self, model, problem_description=""):
@@ -74,7 +94,8 @@ class Revisor:
         """
         prompt = (f"Considerando o problema descrito: {self.problem_description}\n\n"
                   f"Analise o seguinte código e proponha melhorias de velocidade, "
-                  f"uso de memória, e boas práticas de codificação:\n{code}")
+                  f"uso de memória, e boas práticas de codificação:\n{code}. Seja
+                  direto, responda somente com as sujestões sem implementá-las.")
         feedback = self._chamada_ollama(prompt)
         self.feedback_history.append({"action": "propor_melhorias", "feedback": feedback})
         return feedback
@@ -100,36 +121,42 @@ class Revisor:
         return response['message']['content']
 
 
-def limpar_codigo(codigo):
+def extrair_codigo(texto):
     """
-    Remove os marcadores ```python e ``` do início e final de uma string de código.
+    Extrai o código Python de uma string que está delimitada por ```python e ```.
 
     Args:
-        codigo (str): String contendo o código Python com os marcadores.
+        texto (str): A string contendo o código Python.
 
     Returns:
-        str: Código limpo, sem os marcadores.
+        str: O código Python extraído ou uma mensagem indicando que não foi encontrado.
     """
-    # Remove o marcador do início
-    if codigo.startswith("```python"):
-        codigo = codigo[len("```python"):].lstrip()
-    
-    # Remove o marcador do final
-    if codigo.endswith("```"):
-        codigo = codigo[:-len("```")].rstrip()
-    
+    inicio = texto.find("```python")
+    if inicio == -1:
+        print("Delimitador inicial ```python não encontrado.")
+        return texto
+
+    fim = texto.find("```", inicio + 7)  # Busca o próximo ``` após o início
+    if fim == -1:
+        print("Delimitador final ``` não encontrado.")
+        return texto
+
+    # Extrai o conteúdo entre os delimitadores
+    codigo = texto[inicio + 7:fim].strip()
     return codigo
 
 if __name__ == "__main__":
-    revisor = Revisor("llama3.2")
-    resposta = revisor._chamada_ollama("Você deve utilizar o dataset sklearn.datasets.load_digits(*) e implementar um modelo de Machine Learning de classifição. Você deve armazenar nas rariáveis com nomes precision, recall a precision e o recall do modelo que você criar. Responda somente com o código entre 3 aspas duplas, como no exemplo: \"\"\"código\"\"\".")
-    print("Resposta do Llama:\n", limpar_codigo(resposta))
+    # revisor = Revisor("llama3.2")
+    # resposta = revisor._chamada_ollama("Você deve utilizar o dataset sklearn.datasets.load_digits(*) e implementar um modelo de Machine Learning de classifição. Você deve armazenar nas rariáveis com nomes precision, recall a precision e o recall do modelo que você criar. Responda somente com o código entre 3 aspas duplas, como no exemplo: \"\"\"código\"\"\".")
+    # print("Resposta do Llama:\n", extrair_codigo(resposta))
+    programador = Programador("llama3.2", PROBLEM_DESCRIPTION)
+    programador.criar_novo_codigo()
     # Ambiente para execução do código
     ambiente = {}
 
 
     # Executa o código no ambiente especificado
-    exec(limpar_codigo(resposta), ambiente)
+    exec(programador.codigo, ambiente)
 
     # Captura o valor de `resultado` do ambiente
     print(f"A (precision, recall) é: ({ambiente["precision"]}, {ambiente["recall"]})")
