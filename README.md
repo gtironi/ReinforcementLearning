@@ -1,67 +1,76 @@
 # Multi-Agent Reinforcement Learning para Análise de Dados
 
-Este projeto envolve a criação de um algoritmo de multi-agent reinforcement learning (MARL) composto por três agentes especializados em resolver problemas de análise de dados, cada um desempenhando um papel específico com base em uma arquitetura cooperativa.
+Este projeto envolve a criação de um sistema de **Multi-Agent Reinforcement Learning (MARL)** composto por dois agentes especializados em melhorar modelos de machine learning para análise de dados. A ideia central é permitir que esses agentes colaborem para encontrar o melhor modelo de machine learning, começando de um modelo simples e melhorando progressivamente até alcançar uma solução eficiente e robusta.
 
 ## Arquitetura dos Agentes
 
-### 1. Agente Codificador
-Responsável pela criação e aprimoramento do código para análise de dados. Suas ações incluem:
-- Criar novo código a partir do problema descrito.
-- Revisar o próprio código, sem interação com o Agente Revisor.
-- Implementar melhorias com base nas sugestões fornecidas pelo Agente Revisor.
-- Documentar e aprimorar a documentação do código.
-- Solicitar explicações ao Agente Revisor sobre uma sugestão recebida, caso necessário.
+### 1. Machine Learning Engineer
+Responsável por implementar as mudanças solicitadas pelo Agente Data Scientist e executar o código para testar os modelos. Suas ações incluem:
+- Criar e treinar novos modelos de machine learning.
+- Alterar hiperparâmetros de modelos existentes.
+- Realizar feature engineering conforme solicitado.
+- Corrigir ou melhorar o código (quando necessário).
 
 #### Recompensas e Penalidades
-- **Recompensas**: Recebe pontos por código correto e por implementar sugestões do Agente Revisor.
+- **Recompensas**: Recebe pontos por melhorar a performance do modelo (em comparação com o modelo anterior).
 - **Penalidades**:
-  - Execuções excessivas do código (peso 1).
-  - Número de sugestões necessárias até a aprovação (peso 3).
-  - Pedidos de melhoria de documentação.
-- **Objetivo**: Maximizar a qualidade final do código e implementar as sugestões de melhoria de forma eficaz.
+  - Uso excessivo de tokens da API (quanto mais tokens, maior a penalização).
+  - Se as ações tomadas não corresponderem corretamente às solicitações do Agente Data Scientist.
+- **Objetivo**: Maximizar o desempenho do modelo com mudanças eficientes e eficazes, minimizando o uso de tokens.
 
-### 2. Agente Revisor
-Um agente sênior especializado em revisar o código e propor melhorias. Suas funções incluem:
-- Propor refatorações e otimizações (melhoria de velocidade, uso de memória, ou boas práticas).
-- Avaliar a implementação das melhorias sugeridas, verificando se foram aplicadas corretamente.
-- Solicitar ao Agente Codificador que melhore a documentação.
-- Aprovar ou rejeitar o código com base na adequação à tarefa, mantendo registros do progresso e fornecendo feedback contínuo ao Agente Codificador.
+### 2. Agente Data Scientist
+Responsável por sugerir melhorias no modelo, com foco nas melhores práticas de análise de dados. Suas ações incluem:
+- Propor novo modelo de ML
+- Propor ajustes de hiperparâmetros.
+- Sugerir alterações nas features (como engenharia de features para melhorar o desempenho).
+- Decidir não implementar mais melhorias e entregar o modelo final.
+- Fazer análise na base de dados.
 
 #### Recompensas e Penalidades
-- **Recompensas**: Recebe pontos por melhorias e correções efetivas.
+- **Recompensas**: Recebe pontos se suas sugestões forem implementadas corretamente e resultarem em uma melhoria de desempenho significativa.
 - **Penalidades**:
-  - Se mais de três sugestões forem necessárias para a aprovação.
-  - Se alguma sugestão precisar de explicação adicional ou não melhorar significativamente o desempenho.
+  - Uso excessivo de tokens da API (quanto mais tokens, maior a penalização).
+  - Se as sugestões, implementadas corretamente, não resultarem em uma melhoria significativa das métricas.
+- **Objetivo**: Maximizar o desempenho do modelo através de boas sugestões, colaborando com o Agente Executor de maneira eficaz.
 
 ## Ambiente de Treinamento
-O ambiente gerencia o fluxo de treinamento e fornece o problema inicial e a avaliação das respostas dos agentes. Suas funções incluem:
-- Executar o código e identificar erros, avaliando se atende aos requisitos.
-- Fornecer feedback sobre a complexidade do código, com base em linters e ferramentas de análise (Mypy, Ruff, Bandit).
-- Registrar as versões do código e as recompensas/penalidades atribuídas a cada agente conforme seu desempenho.
-- Manter o histórico de sugestões e melhorias no código.
-- Tentar quebrar o código e verificar se as sugestões foram implementadas (com LLM)
+
+O ambiente gerencia o fluxo de treinamento e interage com ambos os agentes, recebendo suas ações e avaliando o desempenho do modelo. Suas funções incluem:
+- Receber as sugestões do Agente Data Scientist e as implementações do Agente Executor.
+- Executar o código do modelo no ambiente de treinamento e calcular as métricas relevantes (F1, Recall, Log-Loss, etc.).
+- Calcular as recompensas e penalidades com base nas métricas, comparando o modelo atual com o anterior.
+- Verificar se o Agente Executor implementou corretamente as sugestões do Agente Data Scientist.
+- Aplicar penalizações com base no uso de tokens, incentivando a utilização eficiente dos recursos.
 
 ### Penalizações de Consumo de Recursos
-Aplicadas a todos os agentes, baseadas nos tokens que utilizam da API, incentivando o uso eficiente dos recursos.
+Aplicadas a ambos os agentes, baseadas no número de tokens que utilizam durante a execução e comunicação com a API. O uso excessivo de tokens resulta em penalizações, incentivando uma utilização mais eficiente.
 
 ### Memória de Colaboração
-Uma memória compartilhada entre o Agente Codificador e o Agente Revisor, que registra sugestões passadas e mudanças entre as versões do código. Isso facilita a cooperação e evita sugestões redundantes.
+Ambos os agentes compartilham uma memória para registrar as sugestões passadas, os modelos criados e as métricas de desempenho. Isso facilita a colaboração entre eles, evitando sugestões redundantes e permitindo um melhor rastreamento do progresso.
 
 ## Fluxo de Treinamento
-1. O ambiente apresenta o problema inicial aos agentes em forma de prompt, designando o papel de cada um.
-2. **Agente Codificador** escolhe uma ação para desenvolver o código, que é então executado e avaliado pelo ambiente, retornando recompensas ou penalidades.
-3. **Agente Revisor** analisa o código, escolhe uma ação (como 'Propor Refatoração') e fornece feedback ao Agente Codificador.
-4. O ambiente avalia as melhorias implementadas, recompensando o Revisor conforme a qualidade do feedback e da refatoração.
-5. O processo continua até que o objetivo seja alcançado ou o problema se repita conforme necessário para refinar o treinamento.
+
+1. O ambiente apresenta o problema inicial (CSV com dados) aos agentes, indicando as colunas que são **features** e quais são **target** (variável a ser prevista).
+2. **Agente Data Scientist** sugere uma mudança no modelo, como a criação de um novo modelo ou ajustes de hiperparâmetros.
+3. **Agente Executor** implementa as mudanças sugeridas, treina o modelo e retorna as métricas de desempenho (F1, Recall, Log-Loss, etc.).
+4. O ambiente calcula as métricas de desempenho e compara o modelo atual com o anterior. As recompensas são atribuídas com base na melhoria das métricas.
+5. O processo continua com o **Agente Data Scientist** propondo novas mudanças, enquanto o **Agente Executor** implementa essas mudanças até que o modelo alcance um desempenho satisfatório.
+
+### Métricas de Desempenho
+As métricas relevantes que os agentes devem focar podem ser passadas pelo usuário, um exemplo é:
+- **F1-Score**
+- **Recall**
+- **Log-Loss**
+- Outras métricas de classificação relevantes para o problema.
+
+O ambiente atribui recompensas com base no **ganho** de desempenho entre o modelo anterior e o modelo atual. Por exemplo, se o modelo inicial tem um **Recall** de 80% e o novo modelo tem **Recall** de 92%, o **reward** seria sobre os 12%.
 
 ## Objetivo
-Colaborar para atingir uma solução eficaz, garantindo a qualidade e eficiência do código. As recompensas dadas pelo ambiente visam:
-- **Agente Codificador**: Focar em produzir código correto e eficiente.
-- **Agente Revisor**: Aprimorar o código com sugestões valiosas.
+
+O objetivo do sistema é **colaborar** para encontrar o melhor modelo de machine learning possível, começando com um **baseline simples** e evoluindo para modelos mais complexos à medida que os agentes fazem melhorias incrementais. Ambos os agentes devem trabalhar juntos de forma cooperativa, com o Agente Data Scientist propondo mudanças baseadas em suas análises e o Agente Executor implementando essas mudanças de forma eficiente e eficaz.
 
 ## Links Úteis
 
 - [RLlib](https://applied-rl-course.netlify.app/en/module2)
 - [LLM-based Multi-Agent Reinforcement Learning: Current and Future Directions](https://arxiv.org/abs/2405.11106)
 - [Building Cooperative Embodied Agents Modularly with Large Language Models](https://arxiv.org/abs/2307.02485)
-
