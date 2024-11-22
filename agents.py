@@ -1,4 +1,5 @@
-import requests
+import ollama
+from prompts import *
 
 class Programador:
     def __init__(self, model, problem_description):
@@ -50,17 +51,14 @@ class Programador:
         """
         Faz uma chamada à API do Ollama com o prompt especificado.
         """
-        url = f"http://localhost:11434/api/generate"
-        payload = {
-            "model": self.model,
-            "prompt": f"{self.base_prompt}\n\n{prompt}"
-        }
-        response = requests.post(url, json=payload)
+        response = ollama.chat(model=self.model, messages=[
+        {
+            'role': 'user', 
+            'content': prompt,
+        }])
 
-        if response.status_code == 200:
-            return response.json().get("content", "").strip()
-        else:
-            raise Exception(f"Erro na chamada à API Ollama: {response.status_code} - {response.text}")
+        return response['message']['content']
+       
 
 
 class Revisor:
@@ -93,14 +91,48 @@ class Revisor:
         """
         Faz uma chamada à API do Ollama com o prompt especificado.
         """
-        url = f"http://localhost:11434/api/generate"
-        payload = {
-            "model": self.model,
-            "prompt": f"{self.base_prompt}\n\n{prompt}"
-        }
-        response = requests.post(url, json=payload)
+        response = ollama.chat(model=self.model, messages=[
+        {
+            'role': 'user', 
+            'content': prompt,
+        }])
 
-        if response.status_code == 200:
-            return response.json().get("content", "").strip()
-        else:
-            raise Exception(f"Erro na chamada à API Ollama: {response.status_code} - {response.text}")
+        return response['message']['content']
+
+
+def limpar_codigo(codigo):
+    """
+    Remove os marcadores ```python e ``` do início e final de uma string de código.
+
+    Args:
+        codigo (str): String contendo o código Python com os marcadores.
+
+    Returns:
+        str: Código limpo, sem os marcadores.
+    """
+    # Remove o marcador do início
+    if codigo.startswith("```python"):
+        codigo = codigo[len("```python"):].lstrip()
+    
+    # Remove o marcador do final
+    if codigo.endswith("```"):
+        codigo = codigo[:-len("```")].rstrip()
+    
+    return codigo
+
+if __name__ == "__main__":
+    revisor = Revisor("llama3.2")
+    resposta = revisor._chamada_ollama("Você deve utilizar o dataset sklearn.datasets.load_digits(*) e implementar um modelo de Machine Learning de classifição. Você deve armazenar nas rariáveis com nomes precision, recall a precision e o recall do modelo que você criar. Responda somente com o código entre 3 aspas duplas, como no exemplo: \"\"\"código\"\"\".")
+    print("Resposta do Llama:\n", limpar_codigo(resposta))
+    # Ambiente para execução do código
+    ambiente = {}
+
+
+    # Executa o código no ambiente especificado
+    exec(limpar_codigo(resposta), ambiente)
+
+    # Captura o valor de `resultado` do ambiente
+    print(f"A (precision, recall) é: ({ambiente["precision"]}, {ambiente["recall"]})")
+    
+    
+    
