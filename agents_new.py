@@ -14,9 +14,9 @@ class LLMAgent:
     """
     Classe base para agentes que interagem com modelos de linguagem.
     """
-    def __init__(self, model):
+    def __init__(self, model, limit, temperature):
         self.model = model
-        self.chat = ChatOllama(model=model, temperature=0.8, num_predict=800)
+        self.chat = ChatOllama(model=model, temperature=temperature, num_predict=limit)
         self.chain = self.chat | StrOutputParser()
 
     def generate(self, prompt):
@@ -30,8 +30,8 @@ class Programador(LLMAgent):
     """
     Agente responsável por gerar código com base na descrição do problema.
     """
-    def __init__(self, model, problem_description):
-        super().__init__(model)
+    def __init__(self, model, problem_description, limit, temperature):
+        super().__init__(model, limit, temperature)
         self.problem_description = problem_description
 
     def criar_codigo(self):
@@ -64,32 +64,55 @@ class Programador(LLMAgent):
         """
         return self.generate(prompt)
 
-
-class Revisor(LLMAgent):
-    """
-    Agente responsável por revisar e ajustar o código gerado pelo Programador.
-    """
-    def __init__(self, model, problem_description):
-        super().__init__(model)
-        self.problem_description = problem_description
-
-    def revisar_codigo(self, codigo, erro):
-        """
-        Gera um novo código revisado com base no erro encontrado.
-        """
-
+    def arrumar_codigo(self, codigo, erros, sugestoes):
         prompt = f"""
         You are a Python Machine Learning Engineer. The following Python code failed with the error: `{erro}`.
-        Please fix the issue and return the full corrected code at once. If there are funcitions used just once, you can remove them.
-        Always try to make it as simples as possible.
+        Please fix the issue and return the full corrected code at once.
+        Use the following suggestions to improve the code:
 
-        ### Instructions:
-        1. The code is made to solve the following problem: `{self.problem_description}`.
+        {sugestoes}
 
         ### Code:
         ```python
         {codigo}
         ```
+        """
+
+        return self.generate(prompt)
+
+class Revisor(LLMAgent):
+    """
+    Agente responsável por revisar e ajustar o código gerado pelo Programador.
+    """
+    def __init__(self, model, problem_description, limit, temperature):
+        super().__init__(model, limit, temperature)
+        self.problem_description = problem_description
+
+    def revisar_codigo(self, codigo, erro):
+        """
+        Gera sugestões para melhorar o código com base no erro encontrado.
+        """
+
+        prompt = f"""
+        You are a Senior Code Reviewer. The following Python code failed with the error: `{erro}`. Your task is to help a junior developer fix it.
+
+        Focus on simplicity and clarity. Don't use classes. Remove unnecessary functions or arguments, and suggest minimal changes to fix the error.
+
+        Context: The code is meant to solve: `{self.problem_description}`.
+
+        ### Code:
+        ```python
+        {codigo}
+        ```
+
+        Instructions:
+        - Analyze the error and provide concise suggestions.
+        - Keep your response under 100 words, focusing on key fixes NOT NOT suggest details.
+        - Don't include the code, just the suggestions.
+
+        Examples od suggestions:
+        1. Add `import pandas as pd` at the beginning.
+        2. The `fit()` method does not take `learning_rate`, so remove that argument.
         """
         return self.generate(prompt)
 
@@ -125,11 +148,11 @@ def calculate_metrics(y_true, y_pred):
 
 if __name__ == "__main__":
     # Descrição do problema
-    PROBLEM_DESCRIPTION = "Crie um modelo de Machine Learning de classificação utilizando o dataset sklearn.datasets.load_wine(). use 300 iterations and a learning rate of 0.01."
+    PROBLEM_DESCRIPTION = "Crie um modelo de Machine Learning de classificação utilizando o dataset sklearn.datasets.load_wine(). Não coloque nenhum hiperparametro."
 
     # Instanciar agentes
-    programador = Programador("llama3.2", PROBLEM_DESCRIPTION)
-    revisor = Revisor("llama3.2", PROBLEM_DESCRIPTION)
+    programador = Programador("llama3.2", PROBLEM_DESCRIPTION, 800, temperature = 0.6)
+    revisor = Revisor("llama3.2", PROBLEM_DESCRIPTION, 300, temperature = 0.85)
 
     # Loop de interação
     interacoes = 0
@@ -149,7 +172,10 @@ if __name__ == "__main__":
             codigo = programador.criar_codigo()
         elif interacoes < 5:
             errors.append(erro)
-            codigo = revisor.revisar_codigo(codigo, erro)
+            print(f"Erros encontrados nas interações anteriores: {errors}")
+            sugestoes = revisor.revisar_codigo(codigo, erro)
+            print(f"Sugestões do revisor: {sugestoes}")
+            codigo = programador.arrumar_codigo(codigo, erro, sugestoes)
         elif interacoes == 5:
             openai.api_key = os.getenv("OPENAI_API_KEY")
 
