@@ -1,30 +1,11 @@
-import openai
-from sklearn.metrics import classification_report, mean_absolute_error, mean_squared_error, r2_score
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import PromptTemplate
-from langchain_ollama import ChatOllama
-
 import os
-import re
-import numpy as np
+import openai
+
+from LLM import LLMAgent
+from utilities import extrair_codigo, calculate_metrics
+from Revisor import Revisor
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
-
-class LLMAgent:
-    """
-    Classe base para agentes que interagem com modelos de linguagem.
-    """
-    def __init__(self, model, limit, temperature):
-        self.model = model
-        self.chat = ChatOllama(model=model, temperature=temperature, num_predict=limit)
-        self.chain = self.chat | StrOutputParser()
-
-    def generate(self, prompt):
-        """
-        Gera uma resposta baseada em um prompt.
-        """
-        return self.chain.invoke(prompt)
-
 
 class Programador(LLMAgent):
     """
@@ -40,7 +21,10 @@ class Programador(LLMAgent):
         Be concise and ensure your code is well-documented. Try to not use functions if it is not necessary. Don't print anything. Always try to make it as simples as possible.
 
         ### Instructions:
-        1. Write Python code to solve the following problem: `{self.problem_description}`.
+        1. Write Python code following this instructions:
+
+        `{self.problem_description}`
+
         2. Just calculate y_pred and y_test. Don't calculate any metrics.
         3. The code should follow this structure:
 
@@ -66,7 +50,7 @@ class Programador(LLMAgent):
 
     def arrumar_codigo(self, codigo, erros, sugestoes):
         prompt = f"""
-        You are a Python Machine Learning Engineer. The following Python code failed with the error: `{erro}`.
+        You are a Python Machine Learning Engineer. The following Python code failed with the error: `{erros}`.
         Please fix the issue and return the full corrected code at once.
         Use the following suggestions to improve the code:
 
@@ -80,79 +64,13 @@ class Programador(LLMAgent):
 
         return self.generate(prompt)
 
-class Revisor(LLMAgent):
-    """
-    Agente responsável por revisar e ajustar o código gerado pelo Programador.
-    """
-    def __init__(self, model, problem_description, limit, temperature):
-        super().__init__(model, limit, temperature)
-        self.problem_description = problem_description
-
-    def revisar_codigo(self, codigo, erro):
-        """
-        Gera sugestões para melhorar o código com base no erro encontrado.
-        """
-
-        prompt = f"""
-        You are a Senior Code Reviewer. The following Python code failed with the error: `{erro}`. Your task is to help a junior developer fix it.
-
-        Focus on simplicity and clarity. Don't use classes. Remove unnecessary functions or arguments, and suggest minimal changes to fix the error.
-
-        Context: The code is meant to solve: `{self.problem_description}`.
-
-        ### Code:
-        ```python
-        {codigo}
-        ```
-
-        Instructions:
-        - Analyze the error and provide concise suggestions.
-        - Keep your response under 100 words, focusing on key fixes NOT NOT suggest details.
-        - Don't include the code, just the suggestions.
-
-        Examples od suggestions:
-        1. Add `import pandas as pd` at the beginning.
-        2. The `fit()` method does not take `learning_rate`, so remove that argument.
-        """
-        return self.generate(prompt)
-
-def extrair_codigo(texto):
-    try:
-        pattern = r'```python(.*?)```'
-        python_code = re.search(pattern, texto, re.DOTALL).group(1).strip()
-    except:
-        python_code = texto
-    return python_code
-
-def calculate_metrics(y_true, y_pred):
-    """
-    Calcula métricas de classificação ou regressão e retorna um dicionário com os resultados.
-    """
-    try:
-        if np.issubdtype(np.array(y_true).dtype, np.integer):
-            report = classification_report(y_true, y_pred, output_dict=True)
-            return {
-                "accuracy": report.get("accuracy", 0),
-                "precision": report.get("macro avg", {}).get("precision", 0),
-                "recall": report.get("macro avg", {}).get("recall", 0),
-                "f1_score": report.get("macro avg", {}).get("f1-score", 0),
-            }
-        else:
-            return {
-                "mae": mean_absolute_error(y_true, y_pred),
-                "mse": mean_squared_error(y_true, y_pred),
-                "r2_score": r2_score(y_true, y_pred),
-            }
-    except Exception as e:
-        return {"error": str(e)}
-
 if __name__ == "__main__":
     # Descrição do problema
     PROBLEM_DESCRIPTION = "Crie um modelo de Machine Learning de classificação utilizando o dataset sklearn.datasets.load_wine(). Não coloque nenhum hiperparametro."
 
     # Instanciar agentes
-    programador = Programador("llama3.2", PROBLEM_DESCRIPTION, 800, temperature = 0.6)
-    revisor = Revisor("llama3.2", PROBLEM_DESCRIPTION, 300, temperature = 0.85)
+    programador = Programador("qwen2.5-coder:7b", PROBLEM_DESCRIPTION, 800, temperature = 0.6)
+    revisor = Revisor("qwen2.5-coder:3b", PROBLEM_DESCRIPTION, 300, temperature = 0.85)
 
     # Loop de interação
     interacoes = 0
@@ -199,6 +117,8 @@ if __name__ == "__main__":
             break
 
         codigo_extraido = extrair_codigo(codigo) + "\n\nmetrics = calculate_metrics(y_test, y_pred)"
+
+        #print(codigo_extraido)
 
         try:
             # Tenta executar o código

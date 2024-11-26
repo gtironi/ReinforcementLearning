@@ -1,38 +1,7 @@
-import openai
-from sklearn.metrics import classification_report, mean_absolute_error, mean_squared_error, r2_score
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import PromptTemplate
-from langchain_ollama import ChatOllama
-
-import os
-import re
 import ast
-import numpy as np
+from LLM import LLMAgent
+from utilities import extrair_codigo
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
-def extrair_codigo(texto):
-    try:
-        pattern = r'```python(.*?)```'
-        python_code = re.search(pattern, texto, re.DOTALL).group(1).strip()
-    except:
-        python_code = texto
-    return python_code
-
-class LLMAgent:
-    """
-    Classe base para agentes que interagem com modelos de linguagem.
-    """
-    def __init__(self, model, limit, temperature):
-        self.model = model
-        self.chat = ChatOllama(model=model, temperature=temperature, num_predict=limit)
-        self.chain = self.chat | StrOutputParser()
-
-    def generate(self, prompt):
-        """
-        Gera uma resposta baseada em um prompt.
-        """
-        return self.chain.invoke(prompt)
 
 class Summarizer(LLMAgent):
     """
@@ -252,7 +221,6 @@ if __name__ == "__main__":
     print(enginner.validacao_cruzada())
 
     import pandas as pd
-    import numpy as np
 
     df = pd.read_csv("nina_cloe_frames.csv")
 
