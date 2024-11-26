@@ -6,9 +6,18 @@ from langchain_ollama import ChatOllama
 
 import os
 import re
+import ast
 import numpy as np
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
+
+def extrair_codigo(texto):
+    try:
+        pattern = r'```python(.*?)```'
+        python_code = re.search(pattern, texto, re.DOTALL).group(1).strip()
+    except:
+        python_code = texto
+    return python_code
 
 class LLMAgent:
     """
@@ -40,33 +49,14 @@ class Summarizer(LLMAgent):
         Extrai o nome de algoritmos de Machine Learning mencionados no texto.
         """
         prompt = f"""
-        Your task is to identify the machine learning model to be applied mentioned in the question. Return only the model's name in no more than 5 words.
+        Your task is to identify the machine learning model to be applied mentioned in the question. Return only the model's name function in scikit-learn in no more than 5 words.
 
         Question: For a classification task using the `sklearn.datasets.load_wine()` dataset, a **Random Forest Classifier** would be an excellent choice.
-        Answer: Random Forest
+        Answer: RandomForestClassifier
 
         Question: A suitable alternative to Random Forest for this classification task could be **Support Vector Machine (SVM)**, due to its effectiveness in handling small datasets and dealing with high-dimensional data.
-        Answer: Support Vector Machines
+        Answer: SVC
 
-        Question: {text}
-        Answer:
-        """
-        return self.generate(prompt)
-
-    def extract_hyperparameters(self, text):
-        """
-        Extrai hiperparâmetros mencionados no texto.
-        """
-        prompt = f"""
-        Hyperparameter:
-        Question: I need hyperparameters for a Random Forest model.
-        Answer: {{'max_depth': 5, 'n_estimators': 100}}
-
-        Hyperparameter:
-        Question: Provide the hyperparameters for a Logistic Regression model.
-        Answer: {{'penalty': 'l2', 'C': 1.0}}
-
-        Hyperparameter:
         Question: {text}
         Answer:
         """
@@ -100,6 +90,8 @@ class EngenheiroML(LLMAgent):
         self.problem_description = problem_description
         self.models_history = []
         self.summarizer = Summarizer("qwen2.5:0.5b", limit = 120, temperature = 0.93)
+        self.hyperparameters_names = []
+        self.hyperparameters_history = {}
 
     def propor_modelo(self):
         prompt = f"""
@@ -123,44 +115,145 @@ class EngenheiroML(LLMAgent):
             if len(model_to_be_tried.split()) < 10:
                 self.models_history.append(model_to_be_tried)
 
+        self._extract_hyperparameters_names()
+
         return response + "\n\nDo not set any parameters, use the defaut ones."
 
-    def ajustar_hiperparametros(self, modelo):
-        prompt = f"""
-        You are a Machine Learning Engineer. The following problem requires fine-tuning:
-        `{self.problem_description}`.
-        Suggest optimized hyperparameters for the model `{modelo}` to improve performance.
-        Be concise and week you answer short.
-        """
-        return self.generate(prompt)
+    def _extract_hyperparameters_names(self):
+        prompt_know_hiper = f"""
+        The following code stores the hyperparameters of a scikit-learn model in a variable named "param_names".
+        Adapt the code to use the {self.models_history[-1]} model instead. Keep the structure, only change the model.
+        Don't use print(). Return the variable "param_names" in a python code block.
 
-    def realizar_feature_engineering(self, dataset_info):
+        ### Example for RandomForestClassifier:
+        ```python
+        from sklearn.ensemble import RandomForestClassifier
+        import inspect
+
+        signature = inspect.signature(RandomForestClassifier)
+        param_names = [param.name for param in signature.parameters.values() if param.name != "self"]
+        ```
+        """
+
+        response = self.generate(prompt_know_hiper)
+
+        try:
+            local_var = {}
+            param_names_code = extrair_codigo(response)
+            exec(param_names_code, local_var)
+            param_names = local_var.get("param_names", [])
+        except:
+            param_names = []
+
+        self.hyperparameters_names = param_names
+
+    def ajustar_hiperparametros(self):
+        prompt = f"""
+        You are a Machine Learning Engineer tasked with fine-tuning a model. The problem is: `{self.problem_description}`.
+
+        Suggest optimized hyperparameters for the `{self.models_history[-1]}` model to enhance performance.
+        According to scikit-learn, the available hyperparameters are:
+
+        {self.hyperparameters_names}
+
+        We already used the following hyperparameters: {self.hyperparameters_history}.
+        You can suggest new values for them or propose new hyperparameters.
+
+        Keep your answer concise and focus only on adjusting the necessary hyperparameters for better performance. Adjust 5 hyperparameters at maximum.
+        Return a dictionary with the hyperparameters and their values. Return it in a python code block.
+        """
+
+        params_dict_response = self.generate(prompt)
+
+        params_dict = ast.literal_eval(extrair_codigo(params_dict_response))
+
+        for key, value in params_dict.items():
+            if key not in self.hyperparameters_history:
+                # Inicializa a chave com uma lista se ela ainda não existir
+                self.hyperparameters_history[key] = []
+
+            if isinstance(value, list):
+                value = value[0]
+
+            # Adiciona o novo valor ao histórico
+            self.hyperparameters_history[key].append(value)
+
+        return params_dict
+
+    def realizar_feature_engineering(self, dataset):
+        try:
+            dataset_info = dataset.describe(percentiles=[], include = "all").loc[["mean", "std", "top", "freq"]]
+        except:
+            try:
+                dataset_info = dataset.describe(percentiles=[], include = "all").loc[["mean", "std"]]
+            except:
+                dataset_info = dataset.describe(percentiles=[], include = "all")
+
         prompt = f"""
         You are a Machine Learning Engineer. For the dataset described below:
+
         `{dataset_info}`,
+
         suggest specific feature engineering techniques (e.g., transformations, encodings, or selection).
+
         Focus on improving the data quality and model performance for the problem:
         `{self.problem_description}`.
-        Be concise and specific.
+        Be concise and specific. Suggest just one feature engineering technique.
+        Specify the coluns names to be used in the feature engineering.
+        Don't return the code.
         """
+
         return self.generate(prompt)
 
-    def validacao_cruzada(self, modelo):
+    def validacao_cruzada(self):
         prompt = f"""
-        You are a Machine Learning Engineer. Propose a cross-validation strategy for the model `{modelo}`
-        given the problem:
-        `{self.problem_description}`.
-        Include the number of folds, and whether stratification is necessary.
-        Be concise and explain your reasoning.
+        You are a Machine Learning Engineer tasked with fine-tuning a model. The problem is: `{self.problem_description}`.
+
+        Propose a cross-validation strategy for the `{self.models_history[-1]}` model to enhance performance.
+        According to scikit-learn, the available hyperparameters are:
+
+        {self.hyperparameters_names}
+
+        We already used the following hyperparameters: {self.hyperparameters_history}.
+        You can suggest new values for them or propose new hyperparameters.
+
+        Keep your answer concise and focus only on adjusting the necessary hyperparameters for better performance.
+        Adjust 3 hyperparameters at maximum. The combination of hyperparameters to be tested should not exceed 30.
+        Return a dictionary with the hyperparameters and their values. Return it in a python code block.
         """
-        return self.generate(prompt)
+
+        params_dict_response = self.generate(prompt)
+
+        params_dict = ast.literal_eval(extrair_codigo(params_dict_response))
+
+        for key, value in params_dict.items():
+            if key not in self.hyperparameters_history:
+                # Inicializa a chave com uma lista se ela ainda não existir
+                self.hyperparameters_history[key] = []
+
+            if isinstance(value, list):
+                for v in value:
+                    self.hyperparameters_history[key].append(v)
+            else:
+                self.hyperparameters_history[key].append(value)
+
+        return params_dict
 
 if __name__ == "__main__":
     # Descrição do problema
-    PROBLEM_DESCRIPTION = "Crie um modelo de Machine Learning de regressão utilizando o dataset sklearn.datasets.load_boston()."
+    PROBLEM_DESCRIPTION = "Crie um modelo de Machine Learning para uma tarefa de classificação de comportamento canino baseado em dados de acelerometro e giroscopio."
 
     # Instanciar agentes
     enginner =  EngenheiroML("qwen2.5-coder:7b", PROBLEM_DESCRIPTION, 300, temperature = 0.5)
 
 
     print(enginner.propor_modelo())
+    # print(enginner.ajustar_hiperparametros())
+    print(enginner.validacao_cruzada())
+
+    import pandas as pd
+    import numpy as np
+
+    df = pd.read_csv("nina_cloe_frames.csv")
+
+    print(enginner.realizar_feature_engineering(df))
